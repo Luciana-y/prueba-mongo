@@ -1,0 +1,128 @@
+services:
+  # --- PostgreSQL para MOVIES ---
+  postgres_movies:
+    image: postgres:16
+    container_name: postgres_movies
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: moviesdb
+      POSTGRES_USER: moviesuser
+      POSTGRES_PASSWORD: moviespass
+    volumes:
+      - movies_data:/var/lib/postgresql/data
+      - ./init/movies_init.sql:/docker-entrypoint-initdb.d/movies_init.sql:ro
+      - ../data/movies:/data/movies:ro
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moviesuser -d moviesdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    
+  # --- MySQL para USERS ---
+  mysql_users:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "rootpass"
+      MYSQL_DATABASE: "usersdb"     # <- era bookingdb
+      MYSQL_USER: "user"
+      MYSQL_PASSWORD: "password"
+    command: ["--secure-file-priv=/var/lib/mysql-files", "--local-infile=0"]
+    ports:
+      - "3307:3306"
+    volumes:
+      - users_data:/var/lib/mysql
+      - ./init/users_init.sql:/docker-entrypoint-initdb.d/10-users-schema.sql:ro
+      - ../data/users:/var/lib/mysql-files:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prootpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+
+  users_import:
+    image: mysql:8.0
+    depends_on:
+      mysql_users:
+        condition: service_healthy
+    volumes:
+      - ../data/users:/var/lib/mysql-files:ro
+    entrypoint:
+      - mysql
+      - --host
+      - mysql_users
+      - --port
+      - "3306"
+      - --user
+      - root
+      - --password=rootpass
+      - --database
+      - usersdb                 # <- era bookingdb/usersdb mezclado
+      - --execute
+      - >
+        LOAD DATA INFILE '/var/lib/mysql-files/users.csv'
+        INTO TABLE users
+        FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+        LINES TERMINATED BY '\n'
+        IGNORE 1 LINES
+        (id, email, password_hash, phone_number, first_name, surname, is_active);
+    restart: "no"
+
+  mongo_bookings:
+    image: mongo:7
+    # ...
+    volumes:
+      - mongo_data:/data/db
+      - ./init/10-mongo-init.js:/docker-entrypoint-initdb.d/10-mongo-init.js:ro
+      - ../data/bookings:/data/bookings:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 })"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  bookings_import:
+    image: mongo:7
+    depends_on:
+      mongo_bookings:
+        condition: service_healthy
+    volumes:
+      - ../data/bookings:/data/bookings:ro
+    entrypoint:
+      - mongoimport
+      - --host
+      - mongo_bookings
+      - --port
+      - "27017"
+      - --db
+      - bookingsdb
+      - --collection
+      - bookings
+      - --file
+      - /data/bookings/bookings_0001.ndjson
+      - --type
+      - json
+      - --numInsertionWorkers
+      - "4"
+    restart: "no"
+
+  # --- SQLite CLI utilitario (opcional) ---
+  sqlite3:
+    image: nouchka/sqlite3:latest
+    container_name: sqlite_db
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    command: /mnt/theaters/theaters.db ".read /mnt/init/theaters_init.sql"
+    volumes:
+      - ./theaters_data:/mnt/theaters:rw
+      - ./init/theaters_init.sql:/mnt/init/theaters_init.sql:ro
+      - ../data/theaters:/mnt/theaters_data:ro
+
+volumes:
+  movies_data:
+  users_data:
+  mongo_data:
