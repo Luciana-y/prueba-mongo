@@ -21,26 +21,26 @@ services:
       retries: 20
     
   # --- MySQL para USERS ---
-mysql_users:
-  image: mysql:8.0
-  restart: unless-stopped
-  environment:
-    MYSQL_ROOT_PASSWORD: "rootpass"
-    MYSQL_DATABASE: "usersdb"
-    MYSQL_USER: "user"
-    MYSQL_PASSWORD: "password"
-  command: ["--secure-file-priv=/var/lib/mysql-files", "--local-infile=0"]
-  ports:
-    - "3307:3306"
-  volumes:
-    - users_data:/var/lib/mysql
-    - ./init/users_init.sql:/docker-entrypoint-initdb.d/10-users-schema.sql:ro
-    - ../data/users:/var/lib/mysql-files:rw    # <-- antes era :ro
-  healthcheck:
-    test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prootpass"]
-    interval: 5s
-    timeout: 3s
-    retries: 20
+  mysql_users:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "rootpass"
+      MYSQL_DATABASE: "usersdb"
+      MYSQL_USER: "user"
+      MYSQL_PASSWORD: "password"
+    command: ["--secure-file-priv=/var/lib/mysql-files", "--local-infile=0"]
+    ports:
+      - "3307:3306"
+    volumes:
+      - users_data:/var/lib/mysql
+      - ./init/users_init.sql:/docker-entrypoint-initdb.d/10-users-schema.sql:ro
+      - ../data/users:/var/lib/mysql-files:rw    # <-- antes era :ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prootpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 
   users_import:
